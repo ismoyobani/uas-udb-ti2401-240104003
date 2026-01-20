@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clickjacking Vulnerability Checker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-tertiary: #1f2937;
+            --accent-cyan: #06b6d4;
+            --accent-emerald: #10b981;
+            --accent-rose: #f43f5e;
+            --accent-amber: #f59e0b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #374151;
+            --glow-cyan: rgba(6, 182, 212, 0.4);
+            --glow-rose: rgba(244, 63, 94, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(6, 182, 212, 0.15), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(16, 185, 129, 0.1), transparent),
+                radial-gradient(ellipse 40% 30% at 0% 80%, rgba(244, 63, 94, 0.08), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Grid pattern overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .logo-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-emerald));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            box-shadow: 0 8px 32px var(--glow-cyan);
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 8px 32px var(--glow-cyan); }
+            50% { box-shadow: 0 8px 48px var(--glow-cyan), 0 0 24px var(--glow-cyan); }
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-top: 0.75rem;
+            font-weight: 400;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            min-width: 280px;
+            position: relative;
+        }
+
+        .input-wrapper::before {
+            content: '🌐';
+            position: absolute;
+            left: 1.25rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.25rem;
+            z-index: 2;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 1.1rem 1.25rem 1.1rem 3.5rem;
+            font-size: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.15);
+        }
+
+        input[type="text"]::placeholder {
+            color: var(--text-muted);
+        }
+
+        button {
+            padding: 1.1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-emerald));
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px var(--glow-cyan);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top-color: var(--bg-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #result {
+            display: none;
+        }
+
+        #result.show {
+            display: block;
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .status-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+
+        .status-icon.vulnerable {
+            background: rgba(244, 63, 94, 0.15);
+            box-shadow: 0 0 24px var(--glow-rose);
+        }
+
+        .status-icon.safe {
+            background: rgba(16, 185, 129, 0.15);
+            box-shadow: 0 0 24px rgba(16, 185, 129, 0.3);
+        }
+
+        .result-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .result-title.vulnerable {
+            color: var(--accent-rose);
+        }
+
+        .result-title.safe {
+            color: var(--accent-emerald);
+        }
+
+        .result-url {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            word-break: break-all;
+        }
+
+        .result-message {
+            background: var(--bg-tertiary);
+            padding: 1.25rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .headers-section h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-item {
+            display: flex;
+            gap: 1rem;
+            padding: 0.875rem 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+        }
+
+        .header-name {
+            color: var(--accent-cyan);
+            font-weight: 500;
+            min-width: 180px;
+        }
+
+        .header-value {
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
+        .header-value.missing {
+            color: var(--accent-rose);
+            font-style: italic;
+        }
+
+        .header-value.present {
+            color: var(--accent-emerald);
+        }
+
+        .error-card {
+            background: rgba(244, 63, 94, 0.1);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+        }
+
+        .error-message {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            color: var(--accent-rose);
+        }
+
+        .error-icon {
+            font-size: 2rem;
+        }
+
+        .info-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .info-box h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .info-box p {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            font-size: 0.95rem;
+        }
+
+        .info-box code {
+            background: var(--bg-tertiary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-cyan);
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        footer a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 640px) {
+            h1 {
+                font-size: 1.75rem;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .header-item {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .header-name {
+                min-width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">🛡️</div>
+            </div>
+            <h1>Clickjacking Checker</h1>
+            <p class="subtitle">Periksa apakah website rentan terhadap serangan clickjacking</p>
+        </header>
+
+        <div class="card">
+            <form id="checkForm">
+                <div class="input-group">
+                    <div class="input-wrapper">
+                        <input 
+                            type="text" 
+                            id="urlInput" 
+                            placeholder="example.com atau https://example.com"
+                            autocomplete="off"
+                            spellcheck="false"
+                        >
+                    </div>
+                    <button type="submit" id="checkBtn">
+                        <span id="btnText">🔍 Periksa</span>
+                        <div class="spinner" id="spinner" style="display: none;"></div>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="result" class="card"></div>
+
+        <div class="info-box">
+            <h3>📚 Apa itu Clickjacking?</h3>
+            <p>
+                <strong>Clickjacking</strong> adalah teknik serangan di mana penyerang menyembunyikan elemen berbahaya 
+                di balik elemen yang terlihat aman. Pengguna mengira mereka mengklik tombol yang tidak berbahaya, 
+                tetapi sebenarnya mereka mengklik elemen tersembunyi yang bisa melakukan aksi berbahaya.
+                <br><br>
+                Website dapat melindungi diri dengan menggunakan header <code>X-Frame-Options</code> atau 
+                <code>Content-Security-Policy: frame-ancestors</code> untuk mencegah halaman dimuat dalam iframe.
+            </p>
+        </div>
+
+        <footer>
+            <p>Dibuat untuk UAS UDB TI2401 | <a href="https://github.com" target="_blank">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script>
+        const form = document.getElementById('checkForm');
+        const urlInput = document.getElementById('urlInput');
+        const checkBtn = document.getElementById('checkBtn');
+        const btnText = document.getElementById('btnText');
+        const spinner = document.getElementById('spinner');
+        const resultDiv = document.getElementById('result');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const url = urlInput.value.trim();
+            if (!url) {
+                showError('Masukkan URL website yang ingin diperiksa');
+                return;
+            }
+
+            // Show loading state
+            setLoading(true);
+            resultDiv.classList.remove('show');
+
+            try {
+                const response = await fetch('/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url })
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    showError(data.error);
+                } else {
+                    showResult(data);
+                }
+            } catch (error) {
+                showError('Terjadi kesalahan saat memeriksa website');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        function setLoading(loading) {
+            checkBtn.disabled = loading;
+            btnText.style.display = loading ? 'none' : 'inline';
+            spinner.style.display = loading ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            resultDiv.innerHTML = `
+                <div class="error-message">
+                    <span class="error-icon">❌</span>
+                    <div>
+                        <strong>Error</strong>
+                        <p>${message}</p>
+                    </div>
+                </div>
+            `;
+            resultDiv.className = 'card error-card show';
+        }
+
+        function showResult(data) {
+            const isVulnerable = data.vulnerable;
+            const statusClass = isVulnerable ? 'vulnerable' : 'safe';
+            const statusIcon = isVulnerable ? '⚠️' : '✅';
+            const statusTitle = isVulnerable ? 'RENTAN' : 'TERLINDUNGI';
+
+            const xFrameValue = data.x_frame_options || '<span class="missing">Tidak ada</span>';
+            const cspValue = data.csp_frame_ancestors || '<span class="missing">Tidak ada</span>';
+            
+            const xFrameClass = data.x_frame_options ? 'present' : 'missing';
+            const cspClass = data.csp_frame_ancestors ? 'present' : 'missing';
+
+            resultDiv.innerHTML = `
+                <div class="result-header">
+                    <div class="status-icon ${statusClass}">${statusIcon}</div>
+                    <div>
+                        <div class="result-title ${statusClass}">${statusTitle}</div>
+                        <div class="result-url">${data.url}</div>
+                    </div>
+                </div>
+                
+                <div class="result-message">
+                    ${data.message}
+                </div>
+
+                <div class="headers-section">
+                    <h3>🔐 Security Headers</h3>
+                    <div class="header-item">
+                        <span class="header-name">X-Frame-Options</span>
+                        <span class="header-value ${xFrameClass}">${data.x_frame_options || 'Tidak ditemukan'}</span>
+                    </div>
+                    <div class="header-item">
+                        <span class="header-name">CSP frame-ancestors</span>
+                        <span class="header-value ${cspClass}">${data.csp_frame_ancestors || 'Tidak ditemukan'}</span>
+                    </div>
+                </div>
+            `;
+            resultDiv.className = 'card show';
+        }
+
+        // Focus input on load
+        urlInput.focus();
+
+        // Enter key support
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                form.dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>
